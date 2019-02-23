@@ -27,6 +27,8 @@
 
 #include <AP_HAL/AP_HAL.h>
 
+#define SIM_RATE_HZ 1000
+
 extern const AP_HAL::HAL& hal;
 
 namespace SITL {
@@ -103,7 +105,7 @@ bool JSBSim::create_templates(void)
 "       interface on TCP 5124 -->\n"
 "  <input port=\"%u\"/>\n"
 "\n"
-"  <run start=\"0\" end=\"10000000\" dt=\"0.001\">\n"
+"  <run start=\"0\" end=\"10000000\" dt=\"%.6f\">\n"
 "    <property value=\"0\"> simulation/notify-time-trigger </property>\n"
 "\n"
 "    <event name=\"start engine\">\n"
@@ -124,7 +126,8 @@ bool JSBSim::create_templates(void)
             jsbsim_model,
             jsbsim_model,
             jsbsim_model,
-            control_port);
+            control_port,
+            1.0/SIM_RATE_HZ);
     fclose(f);
 
     f = fopen(jsbsim_fgout, "w");
@@ -198,9 +201,13 @@ bool JSBSim::start_JSBSim(void)
         }
         char *logdirective;
         char *script;
+        char *rate;
+        char *nice;
 
         asprintf(&logdirective, "--logdirectivefile=%s", jsbsim_fgout);
         asprintf(&script, "--script=%s", jsbsim_script);
+        asprintf(&rate, "--simulation-rate=%u", SIM_RATE_HZ);
+        asprintf(&nice, "--nice=%.6f", 10*1e-6);
 
         if (chdir(autotest_dir) != 0) {
             perror(autotest_dir);
@@ -209,10 +216,9 @@ bool JSBSim::start_JSBSim(void)
 
         int ret = execlp("JSBSim",
                          "JSBSim",
-                         "--realtime",
                          "--suspend",
-                         "--nice",
-                         "--simulation-rate=1000",
+                         nice,
+                         rate,
                          logdirective,
                          script,
                          nullptr);
@@ -438,7 +444,7 @@ void JSBSim::recv_fdm(const struct sitl_input &input)
     rpm2 = fdm.rpm[1];
     
     // assume 1kHz for now
-    time_now_us += 1000;
+    time_now_us += 1e6/SIM_RATE_HZ;
 }
 
 void JSBSim::drain_control_socket()
@@ -467,7 +473,7 @@ void JSBSim::update(const struct sitl_input &input)
     }
     send_servos(input);
     recv_fdm(input);
-    adjust_frame_time(1000);
+    adjust_frame_time(1e6/SIM_RATE_HZ);
     sync_frame_time();
     drain_control_socket();
 }
