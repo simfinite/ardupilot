@@ -135,8 +135,8 @@ bool JSBSim::create_templates(void)
         AP_HAL::panic("Unable to create jsbsim fgout script %s", jsbsim_fgout);
     }
     fprintf(f, "<?xml version=\"1.0\"?>\n"
-            "<output name=\"127.0.0.1\" type=\"FLIGHTGEAR\" port=\"%u\" protocol=\"UDP\" rate=\"1000\"/>\n",
-            fdm_port);
+            "<output name=\"127.0.0.1\" type=\"FLIGHTGEAR\" port=\"%u\" protocol=\"UDP\" rate=\"%u\"/>\n",
+            fdm_port, SIM_RATE_HZ);
     fclose(f);
 
     char *jsbsim_reset;
@@ -415,11 +415,14 @@ void JSBSim::recv_fdm(const struct sitl_input &input)
 {
     FGNetFDM fdm;
     check_stdout();
-    while (sock_fgfdm.recv(&fdm, sizeof(fdm), 100) != sizeof(fdm)) {
-        send_servos(input);
-        check_stdout();
-    }
-    fdm.ByteSwap();
+    do
+    {
+        while (sock_fgfdm.recv(&fdm, sizeof(fdm), 100) != sizeof(fdm)) {
+            send_servos(input);
+            check_stdout();
+        }
+        fdm.ByteSwap();
+    } while (fdm.cur_time == time_now_us);
 
     accel_body = Vector3f(fdm.A_X_pilot, fdm.A_Y_pilot, fdm.A_Z_pilot) * FEET_TO_METERS;
 
@@ -444,7 +447,7 @@ void JSBSim::recv_fdm(const struct sitl_input &input)
     rpm2 = fdm.rpm[1];
     
     // assume 1kHz for now
-    time_now_us += 1e6/SIM_RATE_HZ;
+    time_now_us = fdm.cur_time;
 }
 
 void JSBSim::drain_control_socket()
