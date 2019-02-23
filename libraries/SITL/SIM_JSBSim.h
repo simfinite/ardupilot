@@ -52,6 +52,7 @@ private:
     uint16_t fdm_port;
     char *jsbsim_script;
     char *jsbsim_fgout;
+    char *jsbsim_csvout;
     int jsbsim_stdout;
 
     // default JSBSim model

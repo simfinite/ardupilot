@@ -22,12 +22,40 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <algorithm>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include <AP_HAL/AP_HAL.h>
 
 #define SIM_RATE_HZ 1000
+
+// TODO: Move function getCurrentWorkingDir to some better place
+#include <stdio.h>  /* defines FILENAME_MAX */
+#ifdef WIN32
+    #include <direct.h>
+    #define GetCurrentDir _getcwd
+#else
+    #include <unistd.h>
+    #define GetCurrentDir getcwd
+ #endif
+
+ std::string getCurrentWorkingDir()
+ {
+     char cwd_buffer[FILENAME_MAX];
+     if (!GetCurrentDir(cwd_buffer, sizeof(cwd_buffer)))
+     {
+         printf("Failed to retrieve current working directory.");
+         return "";
+     }
+     else
+     {
+         return cwd_buffer;
+     }
+ }
+
+
+
 
 extern const AP_HAL::HAL& hal;
 
@@ -45,6 +73,7 @@ JSBSim::JSBSim(const char *home_str, const char *frame_str) :
     initialised(false),
     jsbsim_script(nullptr),
     jsbsim_fgout(nullptr),
+    jsbsim_csvout(nullptr),
     created_templates(false),
     started_jsbsim(false),
     opened_control_socket(false),
@@ -80,6 +109,7 @@ bool JSBSim::create_templates(void)
 
     asprintf(&jsbsim_script, "%s/jsbsim_start_%u.xml", autotest_dir, instance);
     asprintf(&jsbsim_fgout,  "%s/jsbsim_fgout_%u.xml", autotest_dir, instance);
+    asprintf(&jsbsim_csvout,  "%s/jsbsim_csvout_%u.xml", autotest_dir, instance);
 
     printf("JSBSim_script: '%s'\n", jsbsim_script);
     printf("JSBSim_fgout: '%s'\n", jsbsim_fgout);
@@ -137,6 +167,23 @@ bool JSBSim::create_templates(void)
     fprintf(f, "<?xml version=\"1.0\"?>\n"
             "<output name=\"127.0.0.1\" type=\"FLIGHTGEAR\" port=\"%u\" protocol=\"UDP\" rate=\"%u\"/>\n",
             fdm_port, SIM_RATE_HZ);
+    fclose(f);
+
+    // Additional log directive file for a CSV logfile of the atmosphere model (wind + turbulence)
+    f = fopen(jsbsim_csvout, "w");
+    if (f == nullptr) {
+        AP_HAL::panic("Unable to create jsbsim fgout script %s", jsbsim_csvout);
+    }
+    const std::string cwd = getCurrentWorkingDir();
+    fprintf(f, "<?xml version=\"1.0\"?>\n"
+            "<output name=\"%s/logs/jsbsim_csv_output.log\" type=\"CSV\" rate=\"10\">\n"
+            "  <atmosphere>ON</atmosphere>\n"
+            "  <propulsion>ON</propulsion>\n"
+            "  <position>ON</position>\n"
+            "  <velocities>ON</velocities>\n"
+            "  <forces>ON</forces>\n"
+            "</output>\n",
+            cwd.c_str());
     fclose(f);
 
     char *jsbsim_reset;
@@ -200,11 +247,13 @@ bool JSBSim::start_JSBSim(void)
             close(i);
         }
         char *logdirective;
+        char *csv_logdirective;
         char *script;
         char *rate;
         char *nice;
 
         asprintf(&logdirective, "--logdirectivefile=%s", jsbsim_fgout);
+        asprintf(&csv_logdirective, "--logdirectivefile=%s", jsbsim_csvout);
         asprintf(&script, "--script=%s", jsbsim_script);
         asprintf(&rate, "--simulation-rate=%u", SIM_RATE_HZ);
         asprintf(&nice, "--nice=%.6f", 10*1e-6);
@@ -220,6 +269,7 @@ bool JSBSim::start_JSBSim(void)
                          nice,
                          rate,
                          logdirective,
+                         csv_logdirective,
                          script,
                          nullptr);
         if (ret != 0) {
