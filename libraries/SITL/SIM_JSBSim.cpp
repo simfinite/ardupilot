@@ -407,6 +407,10 @@ void JSBSim::send_servos(const struct sitl_input &input)
         rudder   = (ch2+ch1)/2.0f;
     }
     float wind_speed_fps = input.wind.speed / FEET_TO_METERS;
+    // In case the constant wind speed is zero, set the "wind speed at 20 ft AGL"
+    // used for turbulences to: severity class * 1 m/s. 
+    // This allows to produce turbulent wind with zero mean wind.
+    float turb_wind_speed_at_20ft_fps = (input.wind.speed < 0.01 ? input.wind.speed : input.wind.turbulence / FEET_TO_METERS);
     asprintf(&buf,
              "set fcs/aileron-cmd-norm %f\n"
              "set fcs/elevator-cmd-norm %f\n"
@@ -416,11 +420,12 @@ void JSBSim::send_servos(const struct sitl_input &input)
              "set atmosphere/wind-mag-fps %f\n"
              "set atmosphere/turbulence/milspec/windspeed_at_20ft_AGL-fps %f\n"
              "set atmosphere/turbulence/milspec/severity %f\n"
-             "step\n",
+             "set atmosphere/turb-type 3\n"
+             "iterate 1\n",
              aileron, elevator, rudder, throttle,
              radians(input.wind.direction),
              wind_speed_fps,
-             wind_speed_fps/3,
+             turb_wind_speed_at_20ft_fps,
              input.wind.turbulence);
     ssize_t buflen = strlen(buf);
     ssize_t sent = sock_control.send(buf, buflen);
