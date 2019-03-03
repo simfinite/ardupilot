@@ -178,6 +178,7 @@ bool JSBSim::create_templates(void)
     fprintf(f, "<?xml version=\"1.0\"?>\n"
             "<output name=\"%s/logs/jsbsim_csv_output.log\" type=\"CSV\" rate=\"10\">\n"
             "  <atmosphere>ON</atmosphere>\n"
+            "  <massprops>ON</massprops>\n"
             "  <propulsion>ON</propulsion>\n"
             "  <position>ON</position>\n"
             "  <velocities>ON</velocities>\n"
